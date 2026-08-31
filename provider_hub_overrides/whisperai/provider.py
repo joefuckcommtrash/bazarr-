@@ -416,8 +416,13 @@ class WhisperAIProvider:
         path = _video_path(video)
         if not path or not self.path_exists(path):
             return []
+        language_payloads = [_language_payload(language) for language in (languages or [])]
         detected = None
-        if not _audio_languages(video):
+        # English is explicitly supplied by the server/UI in the common
+        # untagged-audio case; skip all detection uploads when no other source
+        # language is requested.
+        needs_detection = any(payload.get("alpha3") != "eng" for payload in language_payloads)
+        if not _audio_languages(video) and needs_detection:
             cache_key = (os.path.realpath(path), str(config.get("endpoint", "")))
             now = time.monotonic()
             with _language_detection_lock:
@@ -434,8 +439,7 @@ class WhisperAIProvider:
             if not detected:
                 return []
         results = []
-        for language in languages or []:
-            payload = _language_payload(language)
+        for language, payload in zip(languages or [], language_payloads):
             # When the server is configured with -l en and the media track is
             # untagged, do not block English transcription on auto-detection.
             # Whisper can reliably produce the requested English SRT directly;

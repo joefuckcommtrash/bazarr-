@@ -51,7 +51,7 @@
   "entry_class": "WhisperAIProvider",
   "entry_module": "provider",
   "files": {
-    "provider.py": "2e1623d1f64b9882b1675cf854e9c3e35604938101613bf7e8b8e620b5d1cf87"
+    "provider.py": "0bfad320b1a3d086d0400d0a5e0d554635866c86f7d6b6e6f9fae2333cc4c5e0"
   },
   "languages": [
     "afr",
