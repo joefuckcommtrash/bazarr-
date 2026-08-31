@@ -17,6 +17,9 @@ import wave
 logger = logging.getLogger(__name__)
 _active_requests = set()
 _active_requests_lock = threading.Lock()
+_language_detection_cache = {}
+_language_detection_lock = threading.Lock()
+_LANGUAGE_DETECTION_CACHE_SECONDS = 600
 
 PROVIDER_ID = "whisperai"
 PCM_MIME_TYPE = "application/octet-stream"
@@ -412,7 +415,20 @@ class WhisperAIProvider:
             return []
         detected = None
         if not _audio_languages(video):
-            detected = self._detect_language(path, config)
+            cache_key = (os.path.realpath(path), str(config.get("endpoint", "")))
+            now = time.monotonic()
+            with _language_detection_lock:
+                cached = _language_detection_cache.get(cache_key)
+                if cached and now - cached[0] < _LANGUAGE_DETECTION_CACHE_SECONDS:
+                    detected = cached[1]
+                    logger.info("WhisperAI language detection cache hit: video=%s language=%s",
+                                os.path.basename(path), detected)
+            if detected is None:
+                logger.info("WhisperAI language detection request: video=%s (first %ss)",
+                            os.path.basename(path), DETECT_SAMPLE_SECONDS)
+                detected = self._detect_language(path, config)
+                with _language_detection_lock:
+                    _language_detection_cache[cache_key] = (now, detected)
             if not detected:
                 return []
         results = []
