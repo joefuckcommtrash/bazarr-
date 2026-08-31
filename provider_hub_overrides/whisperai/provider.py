@@ -617,7 +617,15 @@ def _language_payload(language):
     if isinstance(language, dict):
         payload = dict(language)
     else:
-        payload = {"alpha3": str(language)}
+        # Bazarr passes subzero Language objects here.  Their string form is
+        # a display name (for example ``English``), not the ISO alpha-3 code,
+        # so parsing ``str(language)`` makes every request look unsupported.
+        # Prefer the canonical attributes and retain HI/forced flags.
+        alpha3 = getattr(language, "alpha3", None)
+        alpha2 = getattr(language, "alpha2", None)
+        payload = {"alpha3": alpha3 or str(language), "alpha2": alpha2}
+        payload["hi"] = bool(getattr(language, "hi", False))
+        payload["forced"] = bool(getattr(language, "forced", False))
     alpha3 = normalize_language(payload.get("alpha3") or payload.get("alpha2"))
     payload["alpha3"] = alpha3
     payload.setdefault("alpha2", ALPHA3_TO_ALPHA2.get(alpha3))

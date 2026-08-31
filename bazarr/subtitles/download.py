@@ -28,6 +28,7 @@ def generate_subtitles(path, languages, audio_language, sceneName, title, media_
                        previous_subtitles_to_delete=None, job_id=None, fallback_allowed=False,
                        arr_instance_id=None, provider_names=None):
     if not languages:
+        logging.warning("BAZARR Whisper skipped: no requested languages for %s", path)
         return None
 
     logging.debug(f'BAZARR Searching subtitles for this file: {path}')  # noqa: G004
@@ -42,6 +43,8 @@ def generate_subtitles(path, languages, audio_language, sceneName, title, media_
     pool = (_init_pool(media_type, profile_id, providers=provider_names)
             if provider_names else _get_pool(media_type, profile_id))
     providers = pool.providers
+    logging.info("BAZARR subtitle generation providers=%s forced=%s languages=%s video=%s",
+                 providers, provider_names, languages, path)
 
     language_set = _get_language_obj(languages=languages)
     profile = get_profiles_list(profile_id=profile_id)
@@ -55,6 +58,11 @@ def generate_subtitles(path, languages, audio_language, sceneName, title, media_
         video = get_video(force_unicode(path), title, sceneName, providers=providers, media_type=media_type)
     except ValueError as e:
         logging.exception(f'BAZARR Unable to get video object for {path}: {e}')  # noqa: G004
+        return None
+
+    if not video:
+        logging.warning("BAZARR subtitle generation skipped: no video object for %s (providers=%s)",
+                        path, providers)
         return None
 
     if video:
