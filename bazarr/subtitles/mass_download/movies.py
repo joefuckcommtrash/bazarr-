@@ -89,8 +89,7 @@ def movies_download_subtitles(no, job_id=None, job_sub_function=False, arr_insta
 
     # For explicit Whisper jobs, keep the isolated provider selection. Normal
     # searches continue to use the configured provider list.
-    if providers_list is None:
-        providers_list = get_providers()
+    providers_list = provider_names or get_providers()
 
     if provider_names:
         logging.info("BAZARR Whisper generation starting for movie %s (language=%s)",
