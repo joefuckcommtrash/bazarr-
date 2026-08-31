@@ -54,7 +54,12 @@ class SystemApi extends BaseApi {
     const sanitized: LooseObject = {};
     for (const key in data) {
       const value = data[key];
-      sanitized[key] = value === null ? "null" : value;
+      sanitized[key] =
+        key === "settings-translator-ai_profiles" && Array.isArray(value)
+          ? JSON.stringify(value)
+          : value === null
+            ? "null"
+            : value;
     }
     await this.post("/settings", sanitized);
   }

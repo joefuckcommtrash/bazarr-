@@ -119,21 +119,59 @@ const ItemEditFormBody: FunctionComponent<FormBodyProps> = ({
           label="Languages Profile"
         ></Selector>
         <Divider></Divider>
-        <Group justify="right">
+        <Group justify="space-between">
           <Button
-            disabled={isOverlayVisible}
-            onClick={() => {
-              onCancel?.();
-              modals.closeSelf();
-            }}
-            color="gray"
-            variant="subtle"
+            color="red"
+            variant="light"
+            disabled={isOverlayVisible || item?.profileId == null}
+            onClick={() =>
+              modals.openConfirmModal({
+                title: "Clear Language Profile",
+                children:
+                  "Clear the language profile from this item? Bazarr will stop tracking its missing subtitles.",
+                labels: { confirm: "Clear Profile", cancel: "Cancel" },
+                confirmProps: { color: "red" },
+                onConfirm: () => {
+                  if (!item) return;
+                  const itemId = GetItemId(item);
+                  if (!itemId) return;
+                  mutate(
+                    { id: [itemId], profileid: [null] },
+                    {
+                      onSuccess: () => {
+                        showNotification(
+                          notification.info(
+                            "Profile Cleared",
+                            "Language profile cleared successfully",
+                          ),
+                        );
+                        onComplete?.();
+                        modals.closeSelf();
+                      },
+                    },
+                  );
+                },
+              })
+            }
           >
-            Cancel
+            Clear Language Profile
           </Button>
-          <Button disabled={isOverlayVisible} type="submit">
-            Save
-          </Button>
+          <Group gap="xs">
+            <Button
+              disabled={isOverlayVisible}
+              onClick={() => {
+                onCancel?.();
+                modals.closeSelf();
+              }}
+              color="gray"
+              variant="subtle"
+            >
+              Cancel
+            </Button>
+            <Button disabled={isOverlayVisible} type="submit">
+              Save
+            </Button>
+          </Group>
         </Group>
       </Stack>
     </form>

@@ -246,6 +246,20 @@ const MassTranslateForm: FunctionComponent<Props> = ({ items, onComplete }) => {
           service: "AI Subtitle Translator",
           model: ` (${settingsData?.data?.translator?.openrouter_model || ""})`,
         };
+      case "openai_compatible": {
+        const activeProfile =
+          settingsData?.data?.translator?.ai_profiles?.find(
+            (profile) =>
+              profile.id === settingsData?.data?.translator?.ai_active_profile,
+          ) ?? settingsData?.data?.translator?.ai_profiles?.[0];
+        return {
+          ...defaultConfig,
+          service: activeProfile?.name
+            ? `Common AI – ${activeProfile.name}`
+            : "Common AI",
+          model: ` (${activeProfile?.model || settingsData?.data?.translator?.ai_model || ""})`,
+        };
+      }
       default:
         return defaultConfig;
     }
@@ -328,7 +342,8 @@ const MassTranslateForm: FunctionComponent<Props> = ({ items, onComplete }) => {
             <strong>{items.length}</strong> item(s).
           </Text>
           <Text size="xs" c="var(--bz-text-tertiary)" mt="xs">
-            You can choose translation service in the subtitles settings.
+            You can choose the engine and active profile in AI Translator
+            settings.
           </Text>
         </Alert>
 

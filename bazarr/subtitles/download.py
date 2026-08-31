@@ -17,7 +17,7 @@ from utilities.path_mappings import path_mappings
 from utilities.helper import get_target_folder, force_unicode
 from languages.get_languages import alpha3_from_alpha2
 
-from .pool import update_pools, _get_pool
+from .pool import update_pools, _get_pool, _init_pool
 from .utils import get_video, _get_lang_obj, _get_scores, _set_forced_providers
 from .processing import process_subtitle
 
@@ -26,7 +26,7 @@ from .processing import process_subtitle
 def generate_subtitles(path, languages, audio_language, sceneName, title, media_type, profile_id,
                        forced_minimum_score=None, is_upgrade=False, check_if_still_required=False,
                        previous_subtitles_to_delete=None, job_id=None, fallback_allowed=False,
-                       arr_instance_id=None):
+                       arr_instance_id=None, provider_names=None):
     if not languages:
         return None
 
@@ -37,7 +37,10 @@ def generate_subtitles(path, languages, audio_language, sceneName, title, media_
     else:
         os.environ["SZ_KEEP_ENCODING"] = "True"
 
-    pool = _get_pool(media_type, profile_id)
+    # Explicit actions such as "Generate with Whisper" use an isolated pool so
+    # they never query the user's normal subtitle providers first.
+    pool = (_init_pool(media_type, profile_id, providers=provider_names)
+            if provider_names else _get_pool(media_type, profile_id))
     providers = pool.providers
 
     language_set = _get_language_obj(languages=languages)

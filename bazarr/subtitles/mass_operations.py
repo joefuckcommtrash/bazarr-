@@ -12,7 +12,7 @@ from subtitles.tools.subsync_engines import is_sync_engine_output
 from subtitles.tools.mods import subtitles_apply_mods
 from subtitles.indexer.series import series_scan_subtitles
 from subtitles.indexer.movies import movies_scan_subtitles
-from subtitles.mass_download.series import series_download_subtitles
+from subtitles.mass_download.series import series_download_subtitles, episode_download_subtitles
 from subtitles.mass_download.movies import movies_download_subtitles
 from subtitles.upgrade import upgrade_episodes_subtitles, upgrade_movies_subtitles
 from utilities.path_mappings import path_mappings
@@ -24,10 +24,10 @@ logger = logging.getLogger(__name__)
 VALID_ACTIONS = {
     'sync', 'translate', 'OCR_fixes', 'common', 'remove_HI',
     'remove_tags', 'fix_uppercase', 'reverse_rtl', 'emoji',
-    'scan-disk', 'search-missing', 'upgrade',
+    'scan-disk', 'search-missing', 'whisper', 'upgrade',
 }
 
-MEDIA_ACTIONS = {'scan-disk', 'search-missing', 'upgrade'}
+MEDIA_ACTIONS = {'scan-disk', 'search-missing', 'whisper', 'upgrade'}
 
 MOD_ACTIONS = {'OCR_fixes', 'common', 'remove_HI', 'remove_tags', 'fix_uppercase', 'reverse_rtl', 'emoji'}
 
@@ -475,7 +475,7 @@ def _process_subtitle_item(item, action, options, job_id):
     return False
 
 
-def _process_media_action(items, action, job_id):
+def _process_media_action(items, action, job_id, options=None):
     """Handle scan-disk, search-missing, and upgrade actions for series/movies.
 
     Args:
@@ -486,9 +486,11 @@ def _process_media_action(items, action, job_id):
     Returns:
         Dict with queued, skipped, errors.
     """
+    options = options or {}
     queued = 0
     skipped = 0
     errors = []
+    logger.info("BAZARR batch action=%s starting: %d item(s), options=%s", action, len(items), options)
 
     if action == 'upgrade':
         sonarr_series_filters = [(i.get('sonarrSeriesId'), i.get('arr_instance_id')) for i in items
@@ -496,6 +498,7 @@ def _process_media_action(items, action, job_id):
         radarr_filters = [(i.get('radarrId'), i.get('arr_instance_id')) for i in items
                           if i.get('type') == 'movie' and i.get('radarrId')]
         try:
+            logger.info("BAZARR batch action=%s dispatching item %d/%d: %s", action, i, len(items), item)
             if sonarr_series_filters:
                 upgrade_episodes_subtitles(job_id=job_id, sonarr_series_filters=sonarr_series_filters)
             if radarr_filters:
@@ -541,19 +544,41 @@ def _process_media_action(items, action, job_id):
                 else:
                     skipped += 1
                     continue
-            elif action == 'search-missing':
+            elif action in ('search-missing', 'whisper'):
+                whisper_only = action == 'whisper'
+                provider_names = ['whisperai'] if whisper_only else None
+                language = options.get('to_lang') if whisper_only else None
                 if item_type in ('series', 'episode'):
+                    episode_id = item.get('sonarrEpisodeId')
                     series_id = item.get('sonarrSeriesId')
-                    if not series_id:
+                    if whisper_only and item_type == 'episode' and episode_id:
+                        episode_download_subtitles(
+                            episode_id,
+                            job_id=job_id,
+                            job_sub_function=True,
+                            providers_list=provider_names,
+                            arr_instance_id=item.get('arr_instance_id'),
+                            provider_names=provider_names,
+                            language=language,
+                        )
+                    elif not series_id:
                         skipped += 1
                         continue
-                    series_download_subtitles(series_id, arr_instance_id=item.get('arr_instance_id'))
+                    else:
+                        series_download_subtitles(series_id, arr_instance_id=item.get('arr_instance_id'))
                 elif item_type == 'movie':
                     radarr_id = item.get('radarrId')
                     if not radarr_id:
                         skipped += 1
                         continue
-                    movies_download_subtitles(radarr_id, arr_instance_id=item.get('arr_instance_id'))
+                    movies_download_subtitles(
+                        radarr_id,
+                        job_id=job_id if whisper_only else None,
+                        job_sub_function=whisper_only,
+                        arr_instance_id=item.get('arr_instance_id'),
+                        provider_names=provider_names,
+                        language=language,
+                    )
                 else:
                     skipped += 1
                     continue
@@ -585,6 +610,8 @@ def mass_batch_operation(items=None, action='sync', options=None, job_id=None):
         return {'queued': 0, 'skipped': 0, 'errors': [f'Invalid action: {action}']}
 
     options = options or {}
+    logger.info("BAZARR mass batch requested: action=%s items=%d options=%s",
+                action, len(items or []), options)
 
     # When called without a job_id (e.g. from the scheduler), create one so that
     # downstream functions like sync_subtitles run inline instead of re-queuing
@@ -601,7 +628,7 @@ def mass_batch_operation(items=None, action='sync', options=None, job_id=None):
     if action in MEDIA_ACTIONS:
         if not items:
             return {'queued': 0, 'skipped': 0, 'errors': []}
-        return _process_media_action(items, action, job_id)
+        return _process_media_action(items, action, job_id, options)
 
     # Subtitle actions: collect subtitle files, then process them
     if items is not None and len(items) == 0:

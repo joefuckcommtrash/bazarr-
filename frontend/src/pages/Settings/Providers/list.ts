@@ -682,7 +682,7 @@ export const ProviderList: Readonly<ProviderInfo[]> = [
         type: "text",
         key: "endpoint",
         defaultValue: "http://127.0.0.1:9000",
-        name: "Whisper ASR Docker Endpoint",
+        name: "Whisper endpoint (base URL or whisper.cpp /inference URL)",
       },
       {
         type: "text",

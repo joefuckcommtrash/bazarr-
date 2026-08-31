@@ -68,6 +68,7 @@ USER_VISIBLE_SECRETS = frozenset({
     # is NOT a master key that signs other secrets, so it's user-visible
     # at rest and decrypted before the API returns it.
     "translator.openrouter_api_key",
+    "translator.ai_api_key",
     "translator.openrouter_encryption_key",
     "translator.lingarr_token",
     # Subtitle providers - full login pairs (username + password) so a
@@ -127,6 +128,7 @@ USER_VISIBLE_SECRETS = frozenset({
 USER_VISIBLE_SECRET_LISTS = frozenset({
     # AI Subtitle Translator's pool of Gemini API keys
     "translator.gemini_keys",
+    "translator.ai_profile_keys",
 })
 
 

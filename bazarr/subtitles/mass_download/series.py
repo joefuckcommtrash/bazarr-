@@ -88,7 +88,7 @@ def series_download_subtitles(no, job_id=None, job_sub_function=False, arr_insta
 
 
 def episode_download_subtitles(no, job_id=None, job_sub_function=False, providers_list=None, fallback_allowed=False,
-                               arr_instance_id=None):
+                               arr_instance_id=None, provider_names=None, language=None):
     if not job_sub_function and not job_id:
         jobs_queue.add_job_from_function(f"""Downloading missing subtitles for {database.scalar(
             scoped(select(TableShows.title).where(TableShows.sonarrSeriesId == no),
@@ -141,6 +141,10 @@ def episode_download_subtitles(no, job_id=None, job_sub_function=False, provider
     if not providers_list:
         providers_list = get_providers()
 
+    if provider_names:
+        logging.info("BAZARR Whisper generation starting for episode %s (language=%s)",
+                     episode.title, language or "all missing")
+
     downloaded_count = 0
     if providers_list:
         audio_language_list = get_audio_profile_languages(episode.audio_language)
@@ -156,11 +160,12 @@ def episode_download_subtitles(no, job_id=None, job_sub_function=False, provider
                                            progress_message=f'{episode.title} - S{episode.season:02d}E'
                                                             f'{episode.episode:02d} - {episode.episodeTitle}')
 
-        for language in ast.literal_eval(episode.missing_subtitles):
-            if language is not None:
-                hi_ = "True" if language.endswith(':hi') else "False"
-                forced_ = "True" if language.endswith(':forced') else "False"
-                languages.append((language.split(":")[0], hi_, forced_))
+        for missing_language in ast.literal_eval(episode.missing_subtitles):
+            if missing_language is not None and (
+                    language is None or missing_language.split(":")[0] == language):
+                hi_ = "True" if missing_language.endswith(':hi') else "False"
+                forced_ = "True" if missing_language.endswith(':forced') else "False"
+                languages.append((missing_language.split(":")[0], hi_, forced_))
 
         if languages:
             for result in generate_subtitles(episodePath,
@@ -173,7 +178,8 @@ def episode_download_subtitles(no, job_id=None, job_sub_function=False, provider
                                              check_if_still_required=True,
                                              job_id=job_id,
                                              fallback_allowed=fallback_allowed,
-                                             arr_instance_id=arr_instance_id):
+                                             arr_instance_id=arr_instance_id,
+                                             provider_names=provider_names):
                 if result:
                     if isinstance(result, tuple) and len(result):
                         result = result[0]
@@ -193,6 +199,8 @@ def episode_download_subtitles(no, job_id=None, job_sub_function=False, provider
         jobs_queue.update_job_progress(job_id=job_id, progress_value='max',
                                        progress_message=outcome_msg)
         jobs_queue.update_job_name(job_id=job_id, new_job_name=f"Downloaded missing subtitles for {episode.title}")
+        if provider_names:
+            logging.info("BAZARR Whisper generation finished for episode %s: %s", episode.title, outcome_msg)
 
 
 def episode_download_specific_subtitles(sonarr_series_id, sonarr_episode_id, language, hi, forced, job_id=None,

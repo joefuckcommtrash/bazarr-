@@ -194,6 +194,20 @@ const TranslationForm: FunctionComponent<Props> = ({
           service: "AI Translator",
           model: ` (${settings?.data?.translator?.openrouter_model || ""})`,
         };
+      case "openai_compatible": {
+        const activeProfile =
+          settings?.data?.translator?.ai_profiles?.find(
+            (profile) =>
+              profile.id === settings?.data?.translator?.ai_active_profile,
+          ) ?? settings?.data?.translator?.ai_profiles?.[0];
+        return {
+          ...defaultConfig,
+          service: activeProfile?.name
+            ? `Common AI – ${activeProfile.name}`
+            : "Common AI",
+          model: ` (${activeProfile?.model || settings?.data?.translator?.ai_model || ""})`,
+        };
+      }
       default:
         return defaultConfig;
     }
@@ -249,7 +263,8 @@ const TranslationForm: FunctionComponent<Props> = ({
             {translatorModel} will be used.
           </div>
           <div>
-            You can choose translation service in the subtitles settings.
+            You can choose the engine and active profile in AI Translator
+            settings.
           </div>
         </Alert>
         {isGoogleTranslator && (

@@ -30,6 +30,7 @@ export type BatchAction =
   | "reverse_rtl"
   | "scan-disk"
   | "search-missing"
+  | "whisper"
   | "upgrade";
 
 export interface BatchItem {

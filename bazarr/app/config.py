@@ -226,6 +226,24 @@ validators = [
     Validator('translator.gemini_batch_size', must_exist=True, default=300, is_type_of=int, gte=1),
     Validator('translator.translator_info', must_exist=True, default=True, is_type_of=bool),
     Validator('translator.translator_type', must_exist=True, default='google_translate', is_type_of=str, cast=str),
+    Validator('translator.ai_provider', must_exist=True, default='openai', is_type_of=str,
+              is_in=['openai', 'vultr', 'ollama', 'custom']),
+    Validator('translator.ai_url', must_exist=True, default='https://api.openai.com/v1', is_type_of=str),
+    Validator('translator.ai_api_key', must_exist=True, default='', is_type_of=str, cast=str),
+    Validator('translator.ai_model', must_exist=True, default='gpt-4o-mini', is_type_of=str, cast=str),
+    Validator('translator.ai_temperature', must_exist=True, default=0.2, is_type_of=float, gte=0, lte=2),
+    Validator('translator.ai_batch_size', must_exist=True, default=100, is_type_of=int, gte=1, lte=1000),
+    Validator('translator.ai_max_concurrent', must_exist=True, default=2, is_type_of=int, gte=1, lte=10),
+    Validator('translator.ai_timeout', must_exist=True, default=180, is_type_of=int, gte=10, lte=3600),
+    Validator('translator.ai_reasoning', must_exist=True, default='disabled', is_type_of=str,
+              is_in=['disabled', 'low', 'medium', 'high']),
+    Validator('translator.ai_active_profile', must_exist=True, default='default', is_type_of=str, cast=str),
+    Validator('translator.ai_profiles', must_exist=True, default=[{
+        'id': 'default', 'name': 'Default', 'url': 'https://api.openai.com/v1',
+        'model': 'gpt-4o-mini', 'temperature': 0.2, 'batch_size': 100,
+        'max_concurrent': 2, 'timeout': 180, 'reasoning': 'disabled',
+    }], is_type_of=list),
+    Validator('translator.ai_profile_keys', must_exist=True, default=[], is_type_of=list),
     Validator('translator.lingarr_url', must_exist=True, default='http://lingarr:9876', is_type_of=str),
     Validator('translator.openrouter_url', must_exist=True, default='http://subtitle-translator:8765', is_type_of=str),
     Validator('translator.openrouter_api_key', must_exist=True, default='', is_type_of=str, cast=str),
@@ -733,6 +751,7 @@ array_keys = ['excluded_tags',
               'enabled_integrations',
               'enabled_engines',
               'gemini_keys',
+              'ai_profile_keys',
               'path_mappings',
               'path_mappings_movie',
               'remove_profile_tags',
@@ -943,7 +962,7 @@ def save_settings(settings_items):
             value = False
 
         # Handle JSON strings for dict settings
-        if settings_keys[-1] in ['provider_priorities', 'provider_languages', 'tiers'] and isinstance(value, str):
+        if settings_keys[-1] in ['provider_priorities', 'provider_languages', 'tiers', 'ai_profiles'] and isinstance(value, str):
             try:
                 value = json.loads(value)
             except ValueError:

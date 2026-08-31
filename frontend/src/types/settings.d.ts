@@ -195,6 +195,28 @@ declare namespace Settings {
     lingarr_token: string;
     translator_info: boolean;
     translator_type: string;
+    ai_provider?: "openai" | "vultr" | "ollama" | "custom";
+    ai_url?: string;
+    ai_api_key?: string;
+    ai_model?: string;
+    ai_temperature?: number;
+    ai_batch_size?: number;
+    ai_max_concurrent?: number;
+    ai_timeout?: number;
+    ai_reasoning?: "disabled" | "low" | "medium" | "high";
+    ai_active_profile?: string;
+    ai_profiles?: Array<{
+      id: string;
+      name: string;
+      url: string;
+      model: string;
+      temperature: number;
+      batch_size: number;
+      max_concurrent: number;
+      timeout: number;
+      reasoning: string;
+    }>;
+    ai_profile_keys?: string[];
     openrouter_url?: string;
     openrouter_api_key?: string;
     openrouter_model?: string;

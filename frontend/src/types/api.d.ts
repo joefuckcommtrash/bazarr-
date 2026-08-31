@@ -208,6 +208,7 @@ declare namespace Wanted {
     SceneNameType & {
       hearing_impaired: boolean;
       missing_subtitles: Subtitle[];
+      subtitles: Subtitle[];
     };
 
   type Episode = Base &
@@ -216,9 +217,13 @@ declare namespace Wanted {
     AudioLanguageType & {
       episode_number: string;
       seriesType: SonarrSeriesType;
+      profileId: number | null;
     };
 
-  type Movie = Base & MovieIdType & TitleType & AudioLanguageType;
+  type Movie = Base &
+    MovieIdType &
+    TitleType &
+    AudioLanguageType & { profileId: number | null };
 }
 
 declare namespace Blacklist {

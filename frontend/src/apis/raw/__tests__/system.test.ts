@@ -84,6 +84,27 @@ describe("SystemApi.updateSettings", () => {
     expect(entries["languages"]).toEqual(["en", "fr"]);
   });
 
+  it("serializes AI profile objects as one JSON form field", async () => {
+    const profiles = [
+      {
+        id: "local",
+        name: "Local Ollama",
+        url: "http://ollama:11434/v1",
+        model: "qwen3",
+      },
+    ];
+
+    await systemApi.updateSettings({
+      "settings-translator-ai_profiles": profiles,
+    });
+
+    const formData = postSpy.mock.calls[0][1] as FormData;
+    const entries = formDataToObject(formData);
+    expect(entries["settings-translator-ai_profiles"]).toEqual([
+      JSON.stringify(profiles),
+    ]);
+  });
+
   it("represents an empty array as a single empty-string field", async () => {
     await systemApi.updateSettings({ languages: [] });
 

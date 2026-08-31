@@ -399,7 +399,7 @@ _TEST_SERVICES = {
     'radarr':    {'paths': ('/api/system/status', '/api/v3/system/status'),
                   'apikey_required': True,
                   'has_verify_ssl_setting': True},
-    'whisperai': {'paths': ('/status',),
+    'whisperai': {'paths': ('', '/status'),
                   'apikey_required': False,
                   'has_verify_ssl_setting': False},
 }
@@ -558,6 +558,11 @@ def proxy_service(service):
                 return dict(status=False, error=repr(e))
             reachable_ip = resolved_ip
             last_response_code = result.status_code
+            if (service == 'whisperai' and status_path == '' and
+                    base_parsed.path.rstrip('/').endswith('/inference') and
+                    result.headers.get('Server', '').lower().startswith('whisper.cpp')):
+                return dict(status=True, code=result.status_code,
+                            version='whisper.cpp')
             if result.status_code == 200:
                 try:
                     version = result.json()['version']

@@ -386,14 +386,22 @@ const RouterItemContext = createContext<CustomRouteObject[]>([]);
 
 export const Router: FunctionComponent = () => {
   const routes = useRoutes();
+  const { sonarr, radarr } = useEnabledStatus();
 
-  // TODO: Move this outside the function component scope
+  // Badge counts change after ordinary media mutations (for example, saving a
+  // language profile).  Rebuilding the browser router for a badge-only update
+  // resets the active navigation branch and can send the user back to Media.
+  // Only rebuild when the enabled applications change, because those values
+  // actually alter the route structure.  The navbar still receives the latest
+  // route objects below, so its badges continue to update normally.
   const router = useMemo(
     () =>
       createBrowserRouter(routes, {
         basename: Environment.baseUrl,
       }),
-    [routes],
+    // Badge-only route object changes must not replace the active router.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sonarr, radarr],
   );
 
   return (

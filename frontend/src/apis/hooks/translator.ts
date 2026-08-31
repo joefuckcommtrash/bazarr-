@@ -204,6 +204,8 @@ export interface TranslatorTestParams {
   serviceUrl?: string;
   apiKey?: string;
   encryptionKey?: string;
+  direct?: boolean;
+  model?: string;
 }
 
 export function useTestTranslator() {
@@ -211,6 +213,18 @@ export function useTestTranslator() {
     mutationFn: async (params?: TranslatorTestParams) => {
       const response = await client.axios.post<TranslatorTestResponse>(
         "/translator/test",
+        params,
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useDirectTranslatorModels() {
+  return useMutation({
+    mutationFn: async (params: { serviceUrl: string; apiKey?: string }) => {
+      const response = await client.axios.post<{ models: string[] }>(
+        "/translator/models/direct",
         params,
       );
       return response.data;

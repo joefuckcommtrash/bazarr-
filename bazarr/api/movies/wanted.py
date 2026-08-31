@@ -6,7 +6,7 @@ from flask_restx import Resource, Namespace, reqparse, fields, marshal
 from functools import reduce
 
 from app.database import get_exclusion_clause, TableMovies, database, select, func
-from api.swaggerui import subtitles_language_model, audio_language_model
+from api.swaggerui import subtitles_model, subtitles_language_model, audio_language_model
 
 from api.utils import authenticate, postprocess
 
@@ -22,6 +22,7 @@ class MoviesWanted(Resource):
                                     help='Movies ID to list')
 
     get_subtitles_language_model = api_ns_movies_wanted.model('subtitles_language_model', subtitles_language_model)
+    get_subtitles_model = api_ns_movies_wanted.model('subtitles_model', subtitles_model)
     get_audio_language_model = api_ns_movies_wanted.model('audio_language_model', audio_language_model)
 
     data_model = api_ns_movies_wanted.model('wanted_movies_data_model', {
@@ -30,8 +31,10 @@ class MoviesWanted(Resource):
         # routes to the correct Radarr instance. Upstream id kept for back-compat.
         'id': fields.Integer(),
         'arr_instance_id': fields.Integer(),
+        'profileId': fields.Integer(allow_null=True),
         'title': fields.String(),
         'missing_subtitles': fields.Nested(get_subtitles_language_model),
+        'subtitles': fields.Nested(get_subtitles_model),
         'radarrId': fields.Integer(),
         'sceneName': fields.String(),
         'tags': fields.List(fields.String),
@@ -66,8 +69,10 @@ class MoviesWanted(Resource):
         stmt = select(TableMovies.audio_language,
                       TableMovies.id,
                       TableMovies.arr_instance_id,
+                      TableMovies.profileId,
                       TableMovies.title,
                       TableMovies.missing_subtitles,
+                      TableMovies.subtitles,
                       TableMovies.radarrId,
                       TableMovies.sceneName,
                       TableMovies.tags) \
@@ -80,8 +85,10 @@ class MoviesWanted(Resource):
             'audio_language': x.audio_language,
             'id': x.id,
             'arr_instance_id': x.arr_instance_id,
+            'profileId': x.profileId,
             'title': x.title,
             'missing_subtitles': x.missing_subtitles,
+            'subtitles': x.subtitles,
             'radarrId': x.radarrId,
             'sceneName': x.sceneName,
             'tags': x.tags,

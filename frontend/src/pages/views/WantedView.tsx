@@ -17,11 +17,13 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { useDocumentTitle } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import {
   faEraser,
   faFilter,
   faHardDrive,
   faLanguage,
+  faMicrophone,
   faSearch,
   faTimes,
   faVolumeUp,
@@ -29,9 +31,10 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { ColumnDef, Row } from "@tanstack/react-table";
-import { useIsAnyActionRunning } from "@/apis/hooks";
+import { useBatchAction, useIsAnyActionRunning } from "@/apis/hooks";
 import { useInstanceName } from "@/apis/hooks/site";
 import { UsePaginationQueryResult } from "@/apis/queries/hooks";
+import { BatchItem } from "@/apis/raw/subtitles";
 import { QueryPageTable, Toolbox } from "@/components";
 import { MassTranslateModal } from "@/components/forms/MassTranslateForm";
 import { WantedItem } from "@/components/forms/MassTranslateForm";
@@ -54,8 +57,11 @@ interface Props<T extends Wanted.Base> {
   onExcludeLanguagesChange?: (values: string[]) => void;
   missingLanguage?: string;
   onMissingLanguageChange?: (value: string | null) => void;
+  existingLanguage?: string;
+  onExistingLanguageChange?: (value: string | null) => void;
   langOptions?: LangOption[];
   missingLangOptions?: LangOption[];
+  existingLangOptions?: LangOption[];
   dataFilter?: (item: T) => boolean;
   searchAll: () => Promise<void>;
   scanAll: () => Promise<void>;
@@ -74,8 +80,11 @@ function WantedView<T extends Wanted.Base>({
   onExcludeLanguagesChange,
   missingLanguage,
   onMissingLanguageChange,
+  existingLanguage,
+  onExistingLanguageChange,
   langOptions = [],
   missingLangOptions = [],
+  existingLangOptions = [],
   dataFilter,
   searchAll,
   scanAll,
@@ -84,6 +93,7 @@ function WantedView<T extends Wanted.Base>({
   const dataCount = query.paginationStatus.totalCount;
   const hasTask = useIsAnyActionRunning();
   const modals = useModals();
+  const whisper = useBatchAction();
   const [selectedRows, setSelectedRows] = useState<Row<T>[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -108,15 +118,87 @@ function WantedView<T extends Wanted.Base>({
     });
   }, [selectedRows, getWantedItem, modals]);
 
+  const handleMassWhisper = useCallback(async () => {
+    if (selectedRows.length === 0) return;
+    const languageLabel = missingLanguage
+      ? (missingLangOptions.find((item) => item.value === missingLanguage)
+          ?.label ?? missingLanguage)
+      : "all missing languages";
+    if (
+      !window.confirm(
+        `Generate ${languageLabel} with Whisper for ${selectedRows.length} selected item(s)?`,
+      )
+    ) {
+      return;
+    }
+
+    const items: BatchItem[] = selectedRows.map((row) => {
+      const item = getWantedItem(row.original);
+      if (item.type === "episode") {
+        return {
+          type: "episode",
+          sonarrSeriesId: item.sonarrSeriesId,
+          sonarrEpisodeId: item.sonarrEpisodeId,
+          arr_instance_id: item.arrInstanceId,
+        };
+      }
+      if (item.type === "series") {
+        return {
+          type: "series",
+          sonarrSeriesId: item.sonarrSeriesId,
+          arr_instance_id: item.arrInstanceId,
+        };
+      }
+      return {
+        type: "movie",
+        radarrId: item.radarrId,
+        arr_instance_id: item.arrInstanceId,
+      };
+    });
+
+    try {
+      const result = await whisper.mutateAsync({
+        items,
+        action: "whisper",
+        options: missingLanguage ? { toLang: missingLanguage } : undefined,
+      });
+      notifications.show({
+        title: "Whisper Queued",
+        message: `${result.queued} item(s) queued for ${languageLabel}.`,
+        color: "green",
+      });
+      setSelectedRows([]);
+    } catch (error) {
+      notifications.show({
+        title: "Whisper Failed",
+        message: String(error),
+        color: "red",
+      });
+    }
+  }, [
+    selectedRows,
+    missingLanguage,
+    missingLangOptions,
+    getWantedItem,
+    whisper,
+  ]);
+
   // Compute active filter count and chips
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (audioLanguages.length > 0) count++;
     if (excludeLanguages.length > 0) count++;
     if (missingLanguage) count++;
+    if (existingLanguage) count++;
     if (searchValue.length > 0) count++;
     return count;
-  }, [audioLanguages, excludeLanguages, missingLanguage, searchValue]);
+  }, [
+    audioLanguages,
+    excludeLanguages,
+    missingLanguage,
+    existingLanguage,
+    searchValue,
+  ]);
 
   const activeFilterChips = useMemo(() => {
     const chips: {
@@ -171,18 +253,33 @@ function WantedView<T extends Wanted.Base>({
       });
     }
 
+    if (existingLanguage && onExistingLanguageChange) {
+      const name =
+        existingLangOptions.find((l) => l.value === existingLanguage)?.label ??
+        existingLanguage;
+      chips.push({
+        key: "existing-lang",
+        label: `Existing subtitle: ${name}`,
+        color: "green",
+        onRemove: () => onExistingLanguageChange(null),
+      });
+    }
+
     return chips;
   }, [
     searchValue,
     audioLanguages,
     excludeLanguages,
     missingLanguage,
+    existingLanguage,
     langOptions,
     missingLangOptions,
+    existingLangOptions,
     onSearchChange,
     onAudioLanguagesChange,
     onExcludeLanguagesChange,
     onMissingLanguageChange,
+    onExistingLanguageChange,
   ]);
 
   const clearAllFilters = useCallback(() => {
@@ -190,17 +287,20 @@ function WantedView<T extends Wanted.Base>({
     onAudioLanguagesChange?.([]);
     onExcludeLanguagesChange?.([]);
     onMissingLanguageChange?.(null);
+    onExistingLanguageChange?.(null);
   }, [
     onSearchChange,
     onAudioLanguagesChange,
     onExcludeLanguagesChange,
     onMissingLanguageChange,
+    onExistingLanguageChange,
   ]);
 
   const hasAnyFilterControl =
     onAudioLanguagesChange !== undefined ||
     onExcludeLanguagesChange !== undefined ||
-    onMissingLanguageChange !== undefined;
+    onMissingLanguageChange !== undefined ||
+    onExistingLanguageChange !== undefined;
 
   return (
     <Stack gap={0}>
@@ -226,6 +326,13 @@ function WantedView<T extends Wanted.Base>({
             icon={faLanguage}
           >
             {`Mass Translate (${selectedRows.length})`}
+          </Toolbox.Button>
+          <Toolbox.Button
+            disabled={hasTask || selectedRows.length === 0}
+            onClick={handleMassWhisper}
+            icon={faMicrophone}
+          >
+            {`Mass Whisper (${selectedRows.length})`}
           </Toolbox.Button>
         </Group>
         <Group gap="xs">
@@ -426,6 +533,31 @@ function WantedView<T extends Wanted.Base>({
                     data={missingLangOptions}
                     value={missingLanguage ?? null}
                     onChange={onMissingLanguageChange}
+                    searchable
+                    clearable
+                    size="sm"
+                    maxDropdownHeight={250}
+                  />
+                </Box>
+              )}
+            {onExistingLanguageChange !== undefined &&
+              existingLangOptions.length > 0 && (
+                <Box style={{ flex: "1 1 200px", maxWidth: 280 }}>
+                  <Group gap={6} mb={4}>
+                    <FontAwesomeIcon
+                      icon={faLanguage}
+                      size="xs"
+                      opacity={0.6}
+                    />
+                    <Text size="xs" fw={500} c="var(--bz-text-tertiary)">
+                      Existing Subtitle Language
+                    </Text>
+                  </Group>
+                  <Select
+                    placeholder="Select a language..."
+                    data={existingLangOptions}
+                    value={existingLanguage ?? null}
+                    onChange={onExistingLanguageChange}
                     searchable
                     clearable
                     size="sm"

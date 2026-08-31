@@ -321,6 +321,10 @@ class WhisperAIProvider(Provider):
             raise ConfigurationError('Whisper Web Service Pass Video Name option must be provided')
 
         self.endpoint = endpoint.rstrip("/")
+        # whisper.cpp exposes a single /inference endpoint, while
+        # whisper-asr-webservice exposes /asr and /detect-language below a base
+        # URL. Accept either style without requiring a separate provider.
+        self.whisper_cpp = self.endpoint.endswith("/inference")
         self.response = int(response)
         self.timeout = int(timeout)
         self.session = None
@@ -454,10 +458,12 @@ class WhisperAIProvider(Provider):
                 # otherwise ffmpeg will try to combine multiple streams, but our output format doesn't support that.
                 # The first stream is probably the correct one, as later streams are usually commentaries
                 lang_map = f"0:a:m:language:{audio_stream_language}"
-                out = inp.output("-", format="s16le", acodec="pcm_s16le", ac=1, ar=16000, af=audio_filter,
+                out = inp.output("-", format="wav" if self.whisper_cpp else "s16le",
+                                 acodec="pcm_s16le", ac=1, ar=16000, af=audio_filter,
                                  map=lang_map)
             else:
-                out = inp.output("-", format="s16le", acodec="pcm_s16le", ac=1, ar=16000, af=audio_filter)
+                out = inp.output("-", format="wav" if self.whisper_cpp else "s16le",
+                                 acodec="pcm_s16le", ac=1, ar=16000, af=audio_filter)
 
             start_time = time.time()
             out, _ = out.run(cmd=[ffmpeg_path, "-nostdin"], capture_stdout=True, capture_stderr=True) 
@@ -482,14 +488,33 @@ class WhisperAIProvider(Provider):
 
         try:
             video_name = path if self.pass_video_name else None
-            r = self.session.post(f"{self.endpoint}/detect-language",
-                                params={'encode': 'false', 'video_file': video_name},
-                                files={'audio_file': out},
-                                timeout=(self.response, self.timeout))
+            if self.whisper_cpp:
+                r = self.session.post(
+                    self.endpoint,
+                    data={'response_format': 'verbose_json'},
+                    files={'file': ('audio.wav', out, 'audio/wav')},
+                    timeout=(self.response, self.timeout),
+                )
+            else:
+                r = self.session.post(f"{self.endpoint}/detect-language",
+                                    params={'encode': 'false', 'video_file': video_name},
+                                    files={'audio_file': out},
+                                    timeout=(self.response, self.timeout))
+            r.raise_for_status()
             results = r.json()
-        except (JSONDecodeError):
+        except (JSONDecodeError, ValueError):
             logger.error('Invalid JSON response in language detection')
             return None
+
+        if self.whisper_cpp:
+            probabilities = results.get("language_probabilities") or {}
+            language_code = max(probabilities, key=probabilities.get) if probabilities else None
+            if not language_code:
+                logger.info('Whisper.cpp returned no detected language')
+                return None
+            detected_name = results.get("detected_language") or language_code
+            logger.debug(f'Whisper.cpp detection raw results: {results}')
+            return wlm._get_language(language_code, detected_name.title())
 
         if not results.get("language_code"):
             logger.info('WhisperAI returned empty language code')
@@ -669,11 +694,28 @@ class WhisperAIProvider(Provider):
         startTime = time.time()
         video_name = subtitle.video.original_path if self.pass_video_name else None
 
-        r = self.session.post(f"{self.endpoint}/asr",
-                              params={'task': subtitle.task, 'language': input_language, 'output': 'srt', 'encode': 'false',
-                                      'video_file': video_name},
-                              files={'audio_file': out},
-                              timeout=(self.response, self.timeout))
+        if self.whisper_cpp:
+            form = {
+                'response_format': 'srt',
+                'language': input_language,
+            }
+            if subtitle.task == 'translate':
+                form['translate'] = 'true'
+            if video_name:
+                form['video_file'] = video_name
+            r = self.session.post(
+                self.endpoint,
+                data=form,
+                files={'file': ('audio.wav', out, 'audio/wav')},
+                timeout=(self.response, self.timeout),
+            )
+        else:
+            r = self.session.post(f"{self.endpoint}/asr",
+                                  params={'task': subtitle.task, 'language': input_language, 'output': 'srt', 'encode': 'false',
+                                          'video_file': video_name},
+                                  files={'audio_file': out},
+                                  timeout=(self.response, self.timeout))
+        r.raise_for_status()
                               
         endTime = time.time()
         elapsedTime = timedelta(seconds=round(endTime - startTime))

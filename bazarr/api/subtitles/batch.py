@@ -22,6 +22,7 @@ ACTION_LABELS = {
     'emoji': 'Removing Emoji',
     'scan-disk': 'Scanning Disk',
     'search-missing': 'Searching Missing Subtitles',
+    'whisper': 'Generating Subtitles with Whisper',
     'upgrade': 'Upgrading Subtitles',
 }
 
@@ -107,6 +108,8 @@ class BatchOperation(Resource):
             return {'error': f'Batch size exceeds maximum of {MAX_BATCH_SIZE}'}, 400
 
         options = data.get('options', {})
+        logger.info("BAZARR batch API received action=%s items=%d options=%s",
+                    action, len(items), options)
 
         label = ACTION_LABELS.get(action, f'Batch {action}')
         job_name = f"{label} ({len(items)} items)"

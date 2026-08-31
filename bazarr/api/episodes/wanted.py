@@ -6,7 +6,7 @@ from flask_restx import Resource, Namespace, reqparse, fields, marshal
 from functools import reduce
 
 from app.database import get_exclusion_clause, TableEpisodes, TableShows, database, select, func
-from api.swaggerui import subtitles_language_model, audio_language_model
+from api.swaggerui import subtitles_model, subtitles_language_model, audio_language_model
 
 from ..utils import authenticate, postprocess
 
@@ -22,6 +22,7 @@ class EpisodesWanted(Resource):
                                     help='Episodes ID to list')
 
     get_subtitles_language_model = api_ns_episodes_wanted.model('subtitles_language_model', subtitles_language_model)
+    get_subtitles_model = api_ns_episodes_wanted.model('subtitles_model', subtitles_model)
     get_audio_language_model = api_ns_episodes_wanted.model('audio_language_model', audio_language_model)
 
     data_model = api_ns_episodes_wanted.model('wanted_episodes_data_model', {
@@ -31,10 +32,12 @@ class EpisodesWanted(Resource):
         'id': fields.Integer(),
         'series_id': fields.Integer(),
         'arr_instance_id': fields.Integer(),
+        'profileId': fields.Integer(allow_null=True),
         'seriesTitle': fields.String(),
         'episode_number': fields.String(),
         'episodeTitle': fields.String(),
         'missing_subtitles': fields.Nested(get_subtitles_language_model),
+        'subtitles': fields.Nested(get_subtitles_model),
         'sonarrSeriesId': fields.Integer(),
         'sonarrEpisodeId': fields.Integer(),
         'sceneName': fields.String(),
@@ -72,10 +75,12 @@ class EpisodesWanted(Resource):
                       TableEpisodes.id,
                       TableEpisodes.series_id,
                       TableEpisodes.arr_instance_id,
+                      TableShows.profileId,
                       TableShows.title.label('seriesTitle'),
                       TableEpisodes.season.concat('x').concat(TableEpisodes.episode).label('episode_number'),
                       TableEpisodes.title.label('episodeTitle'),
                       TableEpisodes.missing_subtitles,
+                      TableEpisodes.subtitles,
                       TableEpisodes.sonarrSeriesId,
                       TableEpisodes.sonarrEpisodeId,
                       TableEpisodes.sceneName,
@@ -93,10 +98,12 @@ class EpisodesWanted(Resource):
             'id': x.id,
             'series_id': x.series_id,
             'arr_instance_id': x.arr_instance_id,
+            'profileId': x.profileId,
             'seriesTitle': x.seriesTitle,
             'episode_number': x.episode_number,
             'episodeTitle': x.episodeTitle,
             'missing_subtitles': x.missing_subtitles,
+            'subtitles': x.subtitles,
             'sonarrSeriesId': x.sonarrSeriesId,
             'sonarrEpisodeId': x.sonarrEpisodeId,
             'sceneName': x.sceneName,

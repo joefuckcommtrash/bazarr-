@@ -15,6 +15,14 @@ api_ns_translator = Namespace('Translator', description='AI Subtitle Translator 
 logger = logging.getLogger(__name__)
 
 
+def _openai_models_url(service_url):
+    """Return the /models sibling for a base URL or chat endpoint URL."""
+    normalized = str(service_url or '').strip().rstrip('/')
+    if normalized.endswith('/chat/completions'):
+        normalized = normalized[:-len('/chat/completions')]
+    return normalized if normalized.endswith('/models') else f'{normalized}/models'
+
+
 def get_service_url():
     """Get the AI Subtitle Translator service URL from settings."""
     url = settings.translator.openrouter_url
@@ -266,6 +274,27 @@ class TranslatorTest(Resource):
         """
         data = flask_request.get_json(silent=True) or {}
 
+        if data.get("direct"):
+            service_url = (data.get("serviceUrl") or settings.translator.ai_url).rstrip("/")
+            models_url = _openai_models_url(service_url)
+            api_key = data.get("apiKey") or settings.translator.ai_api_key
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            try:
+                response = requests.get(models_url, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    return {
+                        "apiKey": {
+                            "status": "ok",
+                            "label": f"OpenAI-compatible API reachable ({data.get('model') or settings.translator.ai_model})",
+                            "limitRemaining": None,
+                            "usage": None,
+                            "isFreeTier": settings.translator.ai_provider == "ollama",
+                        }
+                    }, 200
+                return {"error": f"API returned {response.status_code}: {response.text[:300]}"}, 502
+            except requests.exceptions.RequestException as e:
+                return {"error": f"Cannot connect to AI API: {e}"}, 503
+
         service_url = data.get("serviceUrl") or get_service_url()
         if service_url:
             service_url = service_url.rstrip("/")
@@ -305,3 +334,36 @@ class TranslatorTest(Resource):
         except Exception as e:
             logger.error(f"Error testing translator: {e}")  # noqa: G004
             return {"error": str(e)}, 500
+
+
+@api_ns_translator.route('translator/models/direct')
+class DirectTranslatorModels(Resource):
+    @authenticate
+    def post(self):
+        """List models exposed by an OpenAI-compatible API."""
+        data = flask_request.get_json(silent=True) or {}
+        service_url = str(data.get("serviceUrl") or "").strip().rstrip("/")
+        if not service_url:
+            return {"error": "API service URL is required"}, 400
+        models_url = _openai_models_url(service_url)
+        api_key = str(data.get("apiKey") or "").strip()
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        try:
+            response = requests.get(models_url, headers=headers, timeout=15)
+            if response.status_code != 200:
+                return {"error": f"API returned {response.status_code}: {response.text[:300]}"}, 502
+            payload = response.json()
+            raw_models = payload.get("data", payload.get("models", [])) \
+                if isinstance(payload, dict) else []
+            models = []
+            for item in raw_models:
+                model_id = item.get("id") or item.get("name") \
+                    if isinstance(item, dict) else item
+                if model_id:
+                    models.append(str(model_id))
+            models = sorted(set(models), key=str.casefold)
+            return {"models": models}, 200
+        except requests.exceptions.RequestException as e:
+            return {"error": f"Cannot connect to AI API: {e}"}, 503
+        except ValueError as e:
+            return {"error": f"Invalid model response: {e}"}, 502

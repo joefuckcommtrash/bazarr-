@@ -577,7 +577,21 @@ class JobsQueue:
                                     1 for j in self.jobs_running_queue
                                     if 'translat' in (j.job_name or '').lower()
                                 )
-                                max_translations = settings.translator.openrouter_max_concurrent
+                                if settings.translator.translator_type == 'openai_compatible':
+                                    profiles = list(settings.translator.ai_profiles or [])
+                                    active_profile = next(
+                                        (profile for profile in profiles
+                                         if isinstance(profile, dict) and
+                                         str(profile.get('id')) == str(settings.translator.ai_active_profile)),
+                                        profiles[0] if profiles else {},
+                                    )
+                                    max_translations = int(
+                                        active_profile.get(
+                                            'max_concurrent', settings.translator.ai_max_concurrent
+                                        )
+                                    )
+                                else:
+                                    max_translations = settings.translator.openrouter_max_concurrent
                                 can_run_job = running_translations < max_translations
                             else:
                                 can_run_job = len(self.jobs_running_queue) < settings.general.concurrent_jobs
@@ -713,4 +727,3 @@ class JobsQueue:
 
 
 jobs_queue = JobsQueue()
-

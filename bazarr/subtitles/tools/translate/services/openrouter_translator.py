@@ -27,6 +27,7 @@ class OpenRouterTranslatorService:
     Translates subtitles using external AI Subtitle Translator service.
     Uses async job queue for long-running translations.
     """
+    translator_name = "AI Subtitle Translator"
 
     def __init__(self, source_srt_file, dest_srt_file, lang_obj, to_lang, from_lang, media_type,
                  video_path, orig_to_lang, forced, hi, sonarr_series_id, sonarr_episode_id,
@@ -110,13 +111,13 @@ class OpenRouterTranslatorService:
 
             try:
                 subs.save(self.dest_srt_file)
-                add_translator_info(self.dest_srt_file, "# Subtitles translated with AI Subtitle Translator #")
+                add_translator_info(self.dest_srt_file, f"# Subtitles translated with {self.translator_name} #")
             except OSError:
                 logger.error(f'BAZARR is unable to save translated subtitles to {self.dest_srt_file}')  # noqa: G004
                 show_message(f'Translation failed: Unable to save translated subtitles to {self.dest_srt_file}')
                 raise OSError
 
-            message = f"{language_from_alpha2(self.from_lang)} subtitles translated to {language_from_alpha3(self.to_lang)} using AI Subtitle Translator."
+            message = f"{language_from_alpha2(self.from_lang)} subtitles translated to {language_from_alpha3(self.to_lang)} using {self.translator_name}."
             result = create_process_result(message, self.video_path, self.orig_to_lang, self.forced, self.hi, self.dest_srt_file, self.media_type)
 
             if self.media_type == 'episode':

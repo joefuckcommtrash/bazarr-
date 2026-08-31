@@ -22,7 +22,8 @@ from app.event_handler import event_stream
 from ..download import generate_subtitles
 
 
-def movies_download_subtitles(no, job_id=None, job_sub_function=False, arr_instance_id=None):
+def movies_download_subtitles(no, job_id=None, job_sub_function=False, arr_instance_id=None,
+                              provider_names=None, language=None):
     if not job_sub_function and not job_id:
         jobs_queue.add_job_from_function(f"""Downloading missing subtitles for """
                                          f"""{database.scalar(scoped(select(TableMovies.title)
@@ -86,15 +87,23 @@ def movies_download_subtitles(no, job_id=None, job_sub_function=False, arr_insta
 
     jobs_queue.update_job_progress(job_id=job_id, progress_max=count_movie, progress_message=movie.title)
 
-    providers_list = get_providers()
+    # For explicit Whisper jobs, keep the isolated provider selection. Normal
+    # searches continue to use the configured provider list.
+    if providers_list is None:
+        providers_list = get_providers()
+
+    if provider_names:
+        logging.info("BAZARR Whisper generation starting for movie %s (language=%s)",
+                     movie.title, language or "all missing")
 
     downloaded_count = 0
     if providers_list:
-        for language in ast.literal_eval(movie.missing_subtitles):
-            if language is not None:
-                hi_ = "True" if language.endswith(':hi') else "False"
-                forced_ = "True" if language.endswith(':forced') else "False"
-                languages.append((language.split(":")[0], hi_, forced_))
+        for missing_language in ast.literal_eval(movie.missing_subtitles):
+            if missing_language is not None and (
+                    language is None or missing_language.split(":")[0] == language):
+                hi_ = "True" if missing_language.endswith(':hi') else "False"
+                forced_ = "True" if missing_language.endswith(':forced') else "False"
+                languages.append((missing_language.split(":")[0], hi_, forced_))
 
         if languages:
             for result in generate_subtitles(moviePath,
@@ -106,7 +115,8 @@ def movies_download_subtitles(no, job_id=None, job_sub_function=False, arr_insta
                                              movie.profileId,
                                              check_if_still_required=True,
                                              job_id=job_id,
-                                             arr_instance_id=arr_instance_id):
+                                             arr_instance_id=arr_instance_id,
+                                             provider_names=provider_names):
                 if result:
                     if isinstance(result, tuple) and len(result):
                         result = result[0]
@@ -123,6 +133,8 @@ def movies_download_subtitles(no, job_id=None, job_sub_function=False, arr_insta
     jobs_queue.update_job_progress(job_id=job_id, progress_value="max",
                                    progress_message=outcome_msg)
     jobs_queue.update_job_name(job_id=job_id, new_job_name=f"Downloaded missing subtitles for {movie.title} ({movie.year})")
+    if provider_names:
+        logging.info("BAZARR Whisper generation finished for movie %s: %s", movie.title, outcome_msg)
 
 
 def movie_download_specific_subtitles(radarr_id, language, hi, forced, job_id=None, arr_instance_id=None):
