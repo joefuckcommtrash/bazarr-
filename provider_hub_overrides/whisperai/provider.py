@@ -354,8 +354,11 @@ def plan_transcription(video, language, detected_language=None):
     return None
 
 
-def extract_audio(path, ffmpeg_path, audio_stream_language=None, timeout_seconds=120, max_duration_seconds=None):
+def extract_audio(path, ffmpeg_path, audio_stream_language=None, timeout_seconds=120,
+                 max_duration_seconds=None, start_seconds=0):
     command = [str(ffmpeg_path), "-nostdin", "-i", str(path)]
+    if start_seconds:
+        command[2:2] = ["-ss", str(float(start_seconds))]
     if audio_stream_language:
         stream_index = _audio_stream_index(path, ffmpeg_path, audio_stream_language, timeout_seconds)
         command.extend(["-map", f"0:{stream_index}"])
@@ -421,12 +424,11 @@ class WhisperAIProvider:
                 cached = _language_detection_cache.get(cache_key)
                 if cached and now - cached[0] < _LANGUAGE_DETECTION_CACHE_SECONDS:
                     detected = cached[1]
-                    logger.info("WhisperAI language detection cache hit: video=%s language=%s",
+                    logger.info("WhisperAI language detection cache hit: video=%s languages=%s",
                                 os.path.basename(path), detected)
             if detected is None:
-                logger.info("WhisperAI language detection request: video=%s (first %ss)",
-                            os.path.basename(path), DETECT_SAMPLE_SECONDS)
-                detected = self._detect_language(path, config)
+                logger.info("WhisperAI language detection sampling: video=%s", os.path.basename(path))
+                detected = self._detect_languages(path, config)
                 with _language_detection_lock:
                     _language_detection_cache[cache_key] = (now, detected)
             if not detected:
@@ -434,7 +436,12 @@ class WhisperAIProvider:
         results = []
         for language in languages or []:
             payload = _language_payload(language)
-            plan = plan_transcription(video, payload, detected_language=detected)
+            plans = detected or [None]
+            plan = None
+            for sample in plans:
+                plan = plan_transcription(video, payload, detected_language=sample)
+                if plan:
+                    break
             if plan is None:
                 continue
             results.append(_candidate(video, path, payload, plan))
@@ -495,13 +502,25 @@ class WhisperAIProvider:
             with _active_requests_lock:
                 _active_requests.discard(request_key)
 
-    def _detect_language(self, path, config):
+    def _detect_languages(self, path, config):
+        duration = _media_duration(path, config["ffmpeg_path"],
+                                    int(config["response_timeout_seconds"]))
+        offsets = sorted({0, max(0, duration * 0.5), max(0, duration * 0.9)})
+        detected = []
+        for offset in offsets:
+            language = self._detect_language(path, config, start_seconds=offset)
+            if language and language not in detected:
+                detected.append(language)
+        return detected
+
+    def _detect_language(self, path, config, start_seconds=0):
         audio = self.audio_runner(
             path,
             config["ffmpeg_path"],
             None,
             int(config["response_timeout_seconds"]),
             max_duration_seconds=DETECT_SAMPLE_SECONDS,
+            start_seconds=start_seconds,
         )
         params = {"encode": "false"}
         if _as_bool(config.get("pass_video_name")):
@@ -688,6 +707,17 @@ def _ffprobe_path(ffmpeg_path):
     directory, filename = os.path.split(str(ffmpeg_path))
     executable = "ffprobe.exe" if filename.lower().endswith(".exe") else "ffprobe"
     return os.path.join(directory, executable) if directory else executable
+
+
+def _media_duration(path, ffmpeg_path, timeout_seconds):
+    command = [_ffprobe_path(ffmpeg_path), "-v", "error", "-show_entries",
+               "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)]
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            check=False, timeout=timeout_seconds)
+    try:
+        return max(0.0, float(result.stdout.decode("utf-8").strip()))
+    except (ValueError, UnicodeDecodeError):
+        return 0.0
 
 
 def _download_response(content):
