@@ -436,7 +436,13 @@ class WhisperAIProvider:
         results = []
         for language in languages or []:
             payload = _language_payload(language)
-            plans = detected or [None]
+            # When the server is configured with -l en and the media track is
+            # untagged, do not block English transcription on auto-detection.
+            # Whisper can reliably produce the requested English SRT directly;
+            # detection is still used for non-English requests.
+            requested_alpha3 = payload.get("alpha3")
+            plans = (["eng"] if requested_alpha3 == "eng" and not _audio_languages(video)
+                     else (detected or [None]))
             plan = None
             for sample in plans:
                 plan = plan_transcription(video, payload, detected_language=sample)
