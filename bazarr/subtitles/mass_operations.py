@@ -547,7 +547,10 @@ def _process_media_action(items, action, job_id, options=None):
             elif action in ('search-missing', 'whisper'):
                 whisper_only = action == 'whisper'
                 provider_names = ['whisperai'] if whisper_only else None
-                language = options.get('to_lang') if whisper_only else None
+                # The configured whisper.cpp server is an English ASR service;
+                # do not trigger language detection or attempt every profile
+                # language when the caller did not explicitly choose one.
+                language = (options.get('to_lang') or 'en') if whisper_only else None
                 if item_type in ('series', 'episode'):
                     episode_id = item.get('sonarrEpisodeId')
                     series_id = item.get('sonarrSeriesId')

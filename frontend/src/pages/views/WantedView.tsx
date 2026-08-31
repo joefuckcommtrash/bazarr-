@@ -123,7 +123,7 @@ function WantedView<T extends Wanted.Base>({
     const languageLabel = missingLanguage
       ? (missingLangOptions.find((item) => item.value === missingLanguage)
           ?.label ?? missingLanguage)
-      : "all missing languages";
+      : "English (default)";
     if (
       !window.confirm(
         `Generate ${languageLabel} with Whisper for ${selectedRows.length} selected item(s)?`,
