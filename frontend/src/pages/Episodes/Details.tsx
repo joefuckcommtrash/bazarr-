@@ -56,7 +56,7 @@ const EpisodeDetails: FunctionComponent = () => {
               <Table.Tbody>
                 {(episode.subtitles ?? []).map((subtitle, index) => (
                   <Table.Tr key={`${subtitle.code2}-${subtitle.path ?? "embedded"}-${index}`}>
-                    <Table.Td>{subtitle.path || "Video File Subtitle Track"}</Table.Td>
+                    <Table.Td>{subtitle.path?.split(/[\\/]/).pop() || "Video File Subtitle Track"}</Table.Td>
                     <Table.Td><Subtitle seriesId={episode.sonarrSeriesId} episodeId={episode.sonarrEpisodeId} arrInstanceId={episode.arr_instance_id} subtitle={subtitle} availableSubtitles={episode.subtitles} /></Table.Td>
                     <Table.Td>{subtitle.path ? "No" : "Yes"}</Table.Td>
                   </Table.Tr>

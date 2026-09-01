@@ -220,7 +220,7 @@ const Table = forwardRef<TableInstance<Item.Episode> | null, Props>(
               <Stack gap={4}>
                 {tracks.map(({ subtitle, missing }, index) => (
                   <Text key={`${subtitle.code2}-${index}`} size="sm" c={missing ? "dimmed" : undefined}>
-                    {missing ? "Missing Subtitles" : subtitle.path || "Video File Subtitle Track"}
+                    {missing ? "Missing Subtitles" : subtitle.path?.split(/[\\/]/).pop() || "Video File Subtitle Track"}
                   </Text>
                 ))}
               </Stack>

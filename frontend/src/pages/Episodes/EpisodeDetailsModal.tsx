@@ -31,7 +31,7 @@ const EpisodeDetailsModal: FunctionComponent<Props> = ({ episode }) => {
           {(episode.subtitles ?? []).map((subtitle, index) => (
             <Table.Tr key={`${subtitle.code2}-${subtitle.path ?? "embedded"}-${index}`}>
               <Table.Td>
-                {subtitle.path || "Video File Subtitle Track"}
+                {subtitle.path?.split(/[\\/]/).pop() || "Video File Subtitle Track"}
               </Table.Td>
               <Table.Td>
                 <Subtitle
