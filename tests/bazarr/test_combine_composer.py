@@ -78,17 +78,19 @@ class TestAssOutput:
         assert "Style: Top" in text
         assert "Style: Middle" in text
 
-    def test_ass_dialogue_lines_per_language(self):
+    def test_ass_two_language_uses_merge_script_layout(self):
         out = compose(
             primary_path=fixture("en_hu_sibling_en.srt"),
             secondary_paths=[fixture("en_hu_sibling_hu.srt")],
             format="ass",
         )
         text = out.decode("utf-8")
-        # 3 primary cues, 2 languages each = 6 dialogue lines.
-        assert text.count("Dialogue:") == 6
-        assert "Dialogue: 0,0:00:01.00,0:00:03.00,Bottom" in text
-        assert "Dialogue: 0,0:00:01.00,0:00:03.00,Top" in text
+        # One event per primary cue, with the English style reset on line two.
+        assert text.count("Dialogue:") == 3
+        assert "Style: Chinese,Microsoft YaHei,16" in text
+        assert "Style: English,Calibri,10" in text
+        assert "Dialogue: 0,0:00:01.00,0:00:03.00,Chinese" in text
+        assert r"Hello there.\N{\rEnglish}Szia." in text
 
     def test_ass_alignment_codes(self):
         out = compose(

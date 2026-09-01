@@ -1,6 +1,7 @@
 # coding=utf-8
 
 import logging
+import re
 from copy import copy
 from io import StringIO
 
@@ -37,6 +38,13 @@ def compose(primary_path, secondary_paths, format):
 
     primary = _load_subtitle(primary_path)
     secondaries = [_load_subtitle(p) for p in secondary_paths]
+
+    # Match the established /opt/scripts/merge_ass.py bilingual layout: the
+    # primary (Chinese) cue owns the timing, the nearest secondary (English)
+    # cue within 1.5 seconds is placed beneath it in one ASS event, and each
+    # language uses its own font/colour style.
+    if format == "ass" and len(secondaries) == 1:
+        return _emit_bilingual_script_ass(primary.events, secondaries[0].events)
 
     modes = []
     aligned_secondaries = []
@@ -164,6 +172,58 @@ def _emit_ass(primary_events, aligned_secondaries):
                 out.append(
                     f"Dialogue: 0,{start},{end},{styles[si + 1]},,0,0,0,,{text}"
                 )
+    return ("\n".join(out) + "\n").encode("utf-8")
+
+
+def _clean_script_text(text):
+    text = re.sub(r"\{.*?\}", "", text or "")
+    text = re.sub(r"^\d+\.\s*", "", text)
+    return text.strip().replace("\n", "\\N")
+
+
+def _emit_bilingual_script_ass(primary_events, secondary_events):
+    """Emit the exact two-language visual style used by merge_ass.py."""
+    out = [
+        "[Script Info]",
+        "Title: Chinese-English Subtitle",
+        "ScriptType: v4.00+",
+        "Collisions: Normal",
+        "PlayResX: 384",
+        "PlayResY: 288",
+        "ScaledBorderAndShadow: no",
+        "Synch Point: 1",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding",
+        "Style: Chinese,Microsoft YaHei,16,&H00FFFFFF,&H00000000,&H0000050D,"
+        "&H00000000,0,0,0,0,100,100,0,0,1,2,1,2,5,5,10,1",
+        "Style: English,Calibri,10,&H00027CCF,&H00000000,&H00000000,"
+        "&H00000000,0,-1,0,0,100,100,0,0,1,2,1,2,5,5,10,1",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, "
+        "MarginV, Effect, Text",
+    ]
+    for primary in primary_events:
+        primary_text = _clean_script_text(primary.text)
+        if not primary_text:
+            continue
+        nearest = min(
+            secondary_events,
+            key=lambda event: abs(primary.start - event.start),
+            default=None,
+        )
+        if nearest is not None and abs(primary.start - nearest.start) <= 1500:
+            secondary_text = _clean_script_text(nearest.text)
+            if secondary_text:
+                primary_text += r"\N{\rEnglish}" + secondary_text
+        out.append(
+            f"Dialogue: 0,{_ass_ts(primary.start)},{_ass_ts(primary.end)},"
+            f"Chinese,,0,0,0,,{primary_text}"
+        )
     return ("\n".join(out) + "\n").encode("utf-8")
 
 
