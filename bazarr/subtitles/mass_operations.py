@@ -32,13 +32,17 @@ MEDIA_ACTIONS = {'scan-disk', 'search-missing', 'whisper', 'upgrade'}
 MOD_ACTIONS = {'OCR_fixes', 'common', 'remove_HI', 'remove_tags', 'fix_uppercase', 'reverse_rtl', 'emoji'}
 
 
-def _parse_subtitles_column(subtitles_raw):
+def _parse_subtitles_column(subtitles_raw, include_embedded=False):
     """Parse the subtitles TEXT column into a list of (lang_string, path) tuples."""
     if not subtitles_raw:
         return []
     try:
         parsed = ast.literal_eval(subtitles_raw)
-        return [(entry[0], entry[1]) for entry in parsed if len(entry) >= 2 and entry[1]]
+        return [
+            (entry[0], entry[1])
+            for entry in parsed
+            if len(entry) >= 2 and (entry[1] or include_embedded)
+        ]
     except (ValueError, SyntaxError):
         return []
 
@@ -230,7 +234,8 @@ def _collect_episodes(series_ids=None, episode_ids=None, action='sync',
         if not _instance_filter_matches(ep.arr_instance_id, req_instances):
             continue
 
-        subtitles = _parse_subtitles_column(ep.subtitles)
+        subtitles = _parse_subtitles_column(
+            ep.subtitles, include_embedded=action == 'translate')
         # Apply the owning instance's per-instance path_mappings (#156).
         video_path = path_mappings.path_replace_instance(ep.path, ep.arr_instance_id, 'episode')
 
@@ -241,6 +246,7 @@ def _collect_episodes(series_ids=None, episode_ids=None, action='sync',
                 skipped += 1
                 continue
 
+        translation_sources_added = set()
         for lang_string, sub_path in subtitles:
             lang_info = languages_from_colon_seperated_string(lang_string)
 
@@ -254,10 +260,28 @@ def _collect_episodes(series_ids=None, episode_ids=None, action='sync',
             if action == 'translate' and source_lang and sub_lang != source_lang:
                 skipped += 1
                 continue
+            if action == 'translate' and sub_lang in translation_sources_added:
+                skipped += 1
+                continue
 
-            # Apply per-instance path_mappings to the stored subtitle path (#156).
-            mapped_sub_path = path_mappings.path_replace_instance(sub_path, ep.arr_instance_id, 'episode')
-            if not os.path.isfile(mapped_sub_path):
+            # Embedded tracks have no filesystem path. Extract text-based tracks
+            # to Bazarr's private cache before feeding them to the same translator
+            # used for external SRT files.
+            if sub_path:
+                mapped_sub_path = path_mappings.path_replace_instance(
+                    sub_path, ep.arr_instance_id, 'episode')
+            elif action == 'translate':
+                from subtitles.tools.translate.batch import extract_embedded_subtitle
+                mapped_sub_path = extract_embedded_subtitle(
+                    video_path, sub_lang, 'episode',
+                    hi=lang_info['hi'], forced=lang_info['forced'])
+                if mapped_sub_path:
+                    logger.info(
+                        "BAZARR mass translate extracted embedded %s source for episode %s",
+                        sub_lang, ep.sonarrEpisodeId)
+            else:
+                mapped_sub_path = None
+            if not mapped_sub_path or not os.path.isfile(mapped_sub_path):
                 skipped += 1
                 continue
 
@@ -297,6 +321,8 @@ def _collect_episodes(series_ids=None, episode_ids=None, action='sync',
             if action == 'translate':
                 item['metadata'] = ep
             items.append(item)
+            if action == 'translate':
+                translation_sources_added.add(sub_lang)
 
     return items, skipped
 
@@ -340,7 +366,8 @@ def _collect_movies(movie_ids=None, action='sync', force_resync=False,
         if not _instance_filter_matches(movie.arr_instance_id, req_instances):
             continue
 
-        subtitles = _parse_subtitles_column(movie.subtitles)
+        subtitles = _parse_subtitles_column(
+            movie.subtitles, include_embedded=action == 'translate')
         # Apply the owning instance's per-instance path_mappings (#156).
         video_path = path_mappings.path_replace_instance(movie.path, movie.arr_instance_id, 'movie')
 
@@ -351,6 +378,7 @@ def _collect_movies(movie_ids=None, action='sync', force_resync=False,
                 skipped += 1
                 continue
 
+        translation_sources_added = set()
         for lang_string, sub_path in subtitles:
             lang_info = languages_from_colon_seperated_string(lang_string)
 
@@ -364,10 +392,25 @@ def _collect_movies(movie_ids=None, action='sync', force_resync=False,
             if action == 'translate' and source_lang and sub_lang != source_lang:
                 skipped += 1
                 continue
+            if action == 'translate' and sub_lang in translation_sources_added:
+                skipped += 1
+                continue
 
-            # Apply per-instance path_mappings to the stored subtitle path (#156).
-            mapped_sub_path = path_mappings.path_replace_instance(sub_path, movie.arr_instance_id, 'movie')
-            if not os.path.isfile(mapped_sub_path):
+            if sub_path:
+                mapped_sub_path = path_mappings.path_replace_instance(
+                    sub_path, movie.arr_instance_id, 'movie')
+            elif action == 'translate':
+                from subtitles.tools.translate.batch import extract_embedded_subtitle
+                mapped_sub_path = extract_embedded_subtitle(
+                    video_path, sub_lang, 'movie',
+                    hi=lang_info['hi'], forced=lang_info['forced'])
+                if mapped_sub_path:
+                    logger.info(
+                        "BAZARR mass translate extracted embedded %s source for movie %s",
+                        sub_lang, movie.radarrId)
+            else:
+                mapped_sub_path = None
+            if not mapped_sub_path or not os.path.isfile(mapped_sub_path):
                 skipped += 1
                 continue
 
@@ -407,6 +450,8 @@ def _collect_movies(movie_ids=None, action='sync', force_resync=False,
             if action == 'translate':
                 item['metadata'] = movie
             items.append(item)
+            if action == 'translate':
+                translation_sources_added.add(sub_lang)
 
     return items, skipped
 
@@ -587,8 +632,9 @@ def _process_media_action(items, action, job_id, options=None):
                     continue
             queued += 1
         except Exception as e:
-            logger.error(f'Error processing {action} for {item}: {e}')  # noqa: G004
-            errors.append(str(e))
+            error_message = str(e) or repr(e)
+            logger.error('Error processing %s for %s: %s', action, item, error_message)
+            errors.append(error_message)
 
     return {'queued': queued, 'skipped': skipped, 'errors': errors}
 

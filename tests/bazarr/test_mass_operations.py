@@ -33,6 +33,12 @@ class TestParseSubtitlesColumn:
         assert len(result) == 1
         assert result[0] == ('en', '/path/to/sub.srt')
 
+    def test_includes_embedded_entries_for_translation(self):
+        from subtitles.mass_operations import _parse_subtitles_column
+        raw = "[['en', None, None], ['en:hi', None, None]]"
+        assert _parse_subtitles_column(raw, include_embedded=True) == [
+            ('en', None), ('en:hi', None)]
+
     def test_short_entries(self):
         from subtitles.mass_operations import _parse_subtitles_column
         raw = "[['en']]"
