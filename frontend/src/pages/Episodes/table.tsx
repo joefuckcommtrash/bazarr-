@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useMemo } from "react";
-import { Group, Text, Tooltip } from "@mantine/core";
+import { Anchor, Group, Stack, Text, Tooltip } from "@mantine/core";
 import { faBookmark as farBookmark } from "@fortawesome/free-regular-svg-icons";
 import {
   faBookmark,
@@ -25,6 +25,7 @@ import {
   isSyncOutputSubtitle,
 } from "@/utilities/subtitles";
 import { Subtitle } from "./components";
+import { EpisodeDetailsModalView } from "./EpisodeDetailsModal";
 import tableStyles from "@/components/tables/BaseTable.module.scss";
 
 interface Props {
@@ -178,14 +179,22 @@ const Table = forwardRef<TableInstance<Item.Episode> | null, Props>(
           accessorKey: "title",
           cell: ({
             row: {
-              original: { sceneName, title },
+              original: episode,
             },
           }) => {
+            const { sceneName, title } = episode;
             return (
               <TextPopover text={sceneName}>
-                <Text className={`table-primary ${tableStyles.episodeTitle}`}>
+                <Anchor
+                  className={`table-primary ${tableStyles.episodeTitle}`}
+                  underline="always"
+                  aria-label={`Open details for episode ${title}`}
+                  onClick={() => {
+                    modals.openContextModal(EpisodeDetailsModalView, { episode });
+                  }}
+                >
                   {title}
-                </Text>
+                </Anchor>
               </TextPopover>
             );
           },
@@ -200,10 +209,66 @@ const Table = forwardRef<TableInstance<Item.Episode> | null, Props>(
           }) => <AudioList audios={audioLanguage}></AudioList>,
         },
         {
-          header: "Subtitles",
-          accessorKey: "missing_subtitles",
+          header: "Subtitle Path",
+          id: "subtitle_path",
           cell: ({ row: { original } }) => {
-            return <SubtitlesCell episode={original} />;
+            const tracks = [
+              ...(original.subtitles ?? []).map((subtitle) => ({ subtitle, missing: false })),
+              ...(original.missing_subtitles ?? []).map((subtitle) => ({ subtitle, missing: true })),
+            ];
+            return (
+              <Stack gap={4}>
+                {tracks.map(({ subtitle, missing }, index) => (
+                  <Text key={`${subtitle.code2}-${index}`} size="sm" c={missing ? "dimmed" : undefined}>
+                    {missing ? "Missing Subtitles" : subtitle.path || "Video File Subtitle Track"}
+                  </Text>
+                ))}
+              </Stack>
+            );
+          },
+        },
+        {
+          header: "Language",
+          id: "subtitle_language",
+          cell: ({ row: { original } }) => {
+            const tracks = [
+              ...(original.subtitles ?? []).map((subtitle) => ({ subtitle, missing: false })),
+              ...(original.missing_subtitles ?? []).map((subtitle) => ({ subtitle, missing: true })),
+            ];
+            return (
+              <Stack gap={4}>
+                {tracks.map(({ subtitle, missing }, index) => (
+                  <Subtitle
+                    key={`${subtitle.code2}-${index}`}
+                    seriesId={original.sonarrSeriesId}
+                    episodeId={original.sonarrEpisodeId}
+                    arrInstanceId={original.arr_instance_id}
+                    subtitle={subtitle}
+                    missing={missing}
+                    availableSubtitles={original.subtitles}
+                  />
+                ))}
+              </Stack>
+            );
+          },
+        },
+        {
+          header: "Embedded",
+          id: "subtitle_embedded",
+          cell: ({ row: { original } }) => {
+            const tracks = [
+              ...(original.subtitles ?? []).map((subtitle) => ({ subtitle, missing: false })),
+              ...(original.missing_subtitles ?? []).map((subtitle) => ({ subtitle, missing: true })),
+            ];
+            return (
+              <Stack gap={4}>
+                {tracks.map(({ subtitle, missing }, index) => (
+                  <Text key={`${subtitle.code2}-${index}`} size="sm">
+                    {missing ? "No" : subtitle.path ? "No" : "Yes"}
+                  </Text>
+                ))}
+              </Stack>
+            );
           },
         },
         {
