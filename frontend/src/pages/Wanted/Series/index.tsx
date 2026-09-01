@@ -13,6 +13,7 @@ import { notifications } from "@mantine/notifications";
 import {
   faEllipsisVertical,
   faEraser,
+  faLanguage,
   faMicrophone,
   faSearch,
 } from "@fortawesome/free-solid-svg-icons";
@@ -30,7 +31,10 @@ import {
 import { useArrInstanceLabels } from "@/apis/hooks/arrInstances";
 import { AudioList, InstanceBadge } from "@/components/bazarr";
 import Language from "@/components/bazarr/Language";
-import { WantedItem } from "@/components/forms/MassTranslateForm";
+import {
+  MassTranslateModal,
+  WantedItem,
+} from "@/components/forms/MassTranslateForm";
 import { useModals } from "@/modules/modals";
 import WantedView from "@/pages/views/WantedView";
 import { BuildKey } from "@/utilities";
@@ -197,10 +201,10 @@ const WantedSeriesView: FunctionComponent = () => {
         accessorKey: "seriesTitle",
         cell: ({
           row: {
-            original: { series_id: seriesId, seriesTitle },
+            original: { series_id: seriesId, seriesTitle, sonarrEpisodeId },
           },
         }) => {
-          const target = `/series/${seriesId}`;
+          const target = `/series/${seriesId}/episode/${sonarrEpisodeId}`;
           return (
             <Anchor
               className={`table-primary ${tableStyles.episodeTitle}`}
@@ -245,11 +249,18 @@ const WantedSeriesView: FunctionComponent = () => {
         accessorKey: "episode_number",
         cell: ({
           row: {
-            original: { episode_number: episodeNumber },
+            original: { episode_number: episodeNumber, series_id: seriesId, sonarrEpisodeId },
           },
         }) => {
           return (
-            <span className={tableStyles.episodeNumber}>{episodeNumber}</span>
+            <Anchor
+              component={Link}
+              to={`/series/${seriesId}/episode/${sonarrEpisodeId}`}
+              className={tableStyles.episodeNumber}
+              underline="always"
+            >
+              {episodeNumber}
+            </Anchor>
           );
         },
       },
@@ -272,56 +283,67 @@ const WantedSeriesView: FunctionComponent = () => {
         accessorKey: "episodeTitle",
         cell: ({
           row: {
-            original: { episodeTitle },
+            original: { episodeTitle, series_id: seriesId, sonarrEpisodeId },
           },
         }) => {
           return (
-            <span className={tableStyles.episodeTitle}>{episodeTitle}</span>
+            <Anchor
+              component={Link}
+              to={`/series/${seriesId}/episode/${sonarrEpisodeId}`}
+              className={tableStyles.episodeTitle}
+              underline="always"
+            >
+              {episodeTitle}
+            </Anchor>
           );
         },
       },
       {
-        header: "Missing",
-        accessorKey: "missing_subtitles",
+        header: "Subtitle Path",
+        id: "subtitle_path",
+        cell: ({ row: { original } }) => {
+          const tracks = [
+            ...(original.subtitles ?? []).map((subtitle) => ({ subtitle, missing: false })),
+            ...(original.missing_subtitles ?? []).map((subtitle) => ({ subtitle, missing: true })),
+          ];
+          return <Group gap="sm">{tracks.map(({ subtitle, missing }, index) => (
+            <Text key={`${subtitle.code2}-${index}`} size="sm" c={missing ? "dimmed" : undefined}>
+              {missing ? "Missing Subtitles" : subtitle.path || "Video File Subtitle Track"}
+            </Text>
+          ))}</Group>;
+        },
+      },
+      {
+        header: "Language",
+        id: "subtitle_language",
         cell: ({
           row: {
             original: {
-              sonarrSeriesId,
-              sonarrEpisodeId,
-              arr_instance_id: arrInstanceId,
+              subtitles,
               missing_subtitles: missingSubtitles,
             },
           },
         }) => {
-          const seriesId = sonarrSeriesId;
-          const episodeId = sonarrEpisodeId;
-
           return (
             <Group gap="sm">
-              {missingSubtitles.map((item, idx) => (
-                <Badge
-                  color={download.isPending ? "gray" : undefined}
-                  leftSection={<FontAwesomeIcon icon={faSearch} />}
-                  key={BuildKey(idx, item.code2)}
-                  style={{ cursor: "pointer" }}
-                  onClick={async () => {
-                    await download.mutateAsync({
-                      seriesId,
-                      episodeId,
-                      arrInstanceId,
-                      form: {
-                        language: item.code2,
-                        hi: item.hi,
-                        forced: item.forced,
-                      },
-                    });
-                  }}
-                >
-                  <Language.Text value={item}></Language.Text>
-                </Badge>
+              {[...(subtitles ?? []), ...(missingSubtitles ?? [])].map((item, idx) => (
+                <Badge key={BuildKey(idx, item.code2)}><Language.Text value={item} /></Badge>
               ))}
             </Group>
           );
+        },
+      },
+      {
+        header: "Embedded",
+        id: "subtitle_embedded",
+        cell: ({ row: { original } }) => {
+          const tracks = [
+            ...(original.subtitles ?? []).map((subtitle) => ({ subtitle, missing: false })),
+            ...(original.missing_subtitles ?? []).map((subtitle) => ({ subtitle, missing: true })),
+          ];
+          return <Group gap="sm">{tracks.map(({ subtitle, missing }, index) => (
+            <Text key={`${subtitle.code2}-${index}`} size="sm">{missing ? "No" : subtitle.path ? "No" : "Yes"}</Text>
+          ))}</Group>;
         },
       },
       {
@@ -334,6 +356,25 @@ const WantedSeriesView: FunctionComponent = () => {
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<FontAwesomeIcon icon={faLanguage} />}
+                onClick={() =>
+                  modals.openContextModal(MassTranslateModal, {
+                    items: [
+                      {
+                        type: "episode",
+                        sonarrSeriesId: original.sonarrSeriesId,
+                        sonarrEpisodeId: original.sonarrEpisodeId,
+                        arrInstanceId: original.arr_instance_id,
+                        seriesTitle: original.seriesTitle,
+                        episodeTitle: original.episodeTitle,
+                      },
+                    ],
+                  })
+                }
+              >
+                Translate...
+              </Menu.Item>
               <Menu.Item
                 disabled={whisper.isPending}
                 leftSection={<FontAwesomeIcon icon={faMicrophone} />}
