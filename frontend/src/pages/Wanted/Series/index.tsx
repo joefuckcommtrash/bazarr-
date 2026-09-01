@@ -299,51 +299,42 @@ const WantedSeriesView: FunctionComponent = () => {
         },
       },
       {
-        header: "Subtitle Path",
-        id: "subtitle_path",
-        cell: ({ row: { original } }) => {
-          const tracks = [
-            ...(original.subtitles ?? []).map((subtitle) => ({ subtitle, missing: false })),
-            ...(original.missing_subtitles ?? []).map((subtitle) => ({ subtitle, missing: true })),
-          ];
-          return <Group gap="sm">{tracks.map(({ subtitle, missing }, index) => (
-            <Text key={`${subtitle.code2}-${index}`} size="sm" c={missing ? "dimmed" : undefined}>
-              {missing ? "Missing Subtitles" : subtitle.path || "Video File Subtitle Track"}
-            </Text>
-          ))}</Group>;
-        },
-      },
-      {
-        header: "Language",
-        id: "subtitle_language",
+        header: "Missing",
+        accessorKey: "missing_subtitles",
         cell: ({
           row: {
             original: {
-              subtitles,
+              sonarrSeriesId,
+              sonarrEpisodeId,
+              arr_instance_id: arrInstanceId,
               missing_subtitles: missingSubtitles,
             },
           },
         }) => {
+          const seriesId = sonarrSeriesId;
+          const episodeId = sonarrEpisodeId;
           return (
             <Group gap="sm">
-              {[...(subtitles ?? []), ...(missingSubtitles ?? [])].map((item, idx) => (
-                <Badge key={BuildKey(idx, item.code2)}><Language.Text value={item} /></Badge>
+              {missingSubtitles.map((item, idx) => (
+                <Badge
+                  color={download.isPending ? "gray" : undefined}
+                  leftSection={<FontAwesomeIcon icon={faSearch} />}
+                  key={BuildKey(idx, item.code2)}
+                  style={{ cursor: "pointer" }}
+                  onClick={async () => {
+                    await download.mutateAsync({
+                      seriesId,
+                      episodeId,
+                      arrInstanceId,
+                      form: { language: item.code2, hi: item.hi, forced: item.forced },
+                    });
+                  }}
+                >
+                  <Language.Text value={item} />
+                </Badge>
               ))}
             </Group>
           );
-        },
-      },
-      {
-        header: "Embedded",
-        id: "subtitle_embedded",
-        cell: ({ row: { original } }) => {
-          const tracks = [
-            ...(original.subtitles ?? []).map((subtitle) => ({ subtitle, missing: false })),
-            ...(original.missing_subtitles ?? []).map((subtitle) => ({ subtitle, missing: true })),
-          ];
-          return <Group gap="sm">{tracks.map(({ subtitle, missing }, index) => (
-            <Text key={`${subtitle.code2}-${index}`} size="sm">{missing ? "No" : subtitle.path ? "No" : "Yes"}</Text>
-          ))}</Group>;
         },
       },
       {

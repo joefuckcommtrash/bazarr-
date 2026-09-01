@@ -50,6 +50,7 @@ const EpisodeDetails: FunctionComponent = () => {
             </div>
             <Divider />
             <Title order={4}>Subtitles</Title>
+            <Table.ScrollContainer minWidth={720}>
             <Table striped highlightOnHover withTableBorder>
               <Table.Thead><Table.Tr><Table.Th>Subtitle Path</Table.Th><Table.Th>Language</Table.Th><Table.Th>Embedded</Table.Th></Table.Tr></Table.Thead>
               <Table.Tbody>
@@ -69,6 +70,7 @@ const EpisodeDetails: FunctionComponent = () => {
                 ))}
               </Table.Tbody>
             </Table>
+            </Table.ScrollContainer>
           </Stack>
         )}
       </QueryOverlay>
